@@ -1,18 +1,15 @@
 % This function performs the chorus effect
-% Output is a buffer of size n that holds the processed input
 
-% audio has 614016 samples
-n = 64;
-i = 1;
-
+%% Initial setup
 [audio, Fs] = audioread('Guitar Clean.wav');
-pad_num = 5000;
+pad_num = 500;
 input = [zeros(1, pad_num), transpose(audio)];
+audio_size = size(audio, 1);
+output = zeros(1, audio_size);
 
-output = zeros(1, 614016);
-total_copies = 20;
-multiplier = 100;
-copy_delays = randi(pad_num, 1, total_copies);
+% Buffer size
+n = 4;
+
 
 lfo_rate = 882; % --> period of 50Hz
 % 8820 samples --> 0.2 seconds
@@ -25,7 +22,7 @@ lfo4 = 50 + lfo1;
 
 in_buf = zeros(1, n);
 
-for num_buffer = 1:floor(614016 / 64) 
+for num_buffer = 1:floor(audio_size / n) 
     in_buf_start_index = pad_num + (num_buffer-1)*n+1;
     in_buf_end_index = in_buf_start_index + n - 1;
     in_buf = input(in_buf_start_index:in_buf_end_index);
@@ -44,18 +41,13 @@ for num_buffer = 1:floor(614016 / 64)
     start_index4 = pad_num + (n*(num_buffer-1)) - num_delays4 + 1;
     end_index4 = start_index4 + n - 1;
     wet = (input(start_index1:end_index1) / 4) + (input(start_index2:end_index2) / 4) + (input(start_index3:end_index3) / 4) + (input(start_index4:end_index4) / 4);
-    out_buf = (in_buf / 2) +  (wet / 2);
-    %out_buf = wet;
+    out_buf = 3 * (in_buf / 4) +  (3 * wet / 4);
     
     out_buf_start_index = n*(num_buffer-1)+1;
     out_buf_end_index = out_buf_start_index + n - 1;
     output(out_buf_start_index:out_buf_end_index) = out_buf;
 end
 
-% for delayed_copy_num = 1:total_copies
-%     start_index = pad_num + (n*(i-1)) - copy_delays(delayed_copy_num) + 1;
-%     end_index = start_index + n - 1;
-%     output = output + (input(start_index:end_index) / total_copies); 
-% end
-
+% lpf = butter(5, 0.1*pi);
+% output = conv(lpf, output);
 audiowrite('Guitar Chorus.wav', output, Fs);

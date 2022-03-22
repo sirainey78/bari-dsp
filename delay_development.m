@@ -1,61 +1,66 @@
-% This function performs the chorus effect
-% Output is a buffer of size n that holds the processed input
+% This function performs the delay effect
 
-% audio has 614016 samples
+%% Initial setup
+[audio, Fs] = audioread('Chorus Example.wav');
+input = transpose(audio);
+audio_size = size(audio, 1);
+output = zeros(1, audio_size);
+
+% Buffer size
 n = 64;
-i = 1;
 
-[audio, Fs] = audioread('Guitar Clean.wav');
-pad_num = 5000;
-input = [zeros(1, pad_num), transpose(audio)];
+%% User parameters
+% Time until you hear the echo'd signal
+delay_time = 0.3;
 
-output = zeros(1, 614016);
-total_copies = 20;
-multiplier = 100;
-copy_delays = randi(pad_num, 1, total_copies);
+% Value between 0 and 1 that determines the echo's decay rate
+delay_feedback_gain = 0.35;
 
-lfo_rate = 882; % --> period of 50Hz
-% 8820 samples --> 0.2 seconds
-A = 4410;
-%10,000 blocks
-lfo1 = repmat([100 300 500 700 900 1100 1300 1300 1100 900 700 500 300 100], 700);
-lfo2 = 10 + lfo1;
-lfo3 = 30 + lfo1;
-lfo4 = 50 + lfo1;
+% How much of the output you want to be the delayed signal
+delay_wet_mix = 0.45;
 
+%% Loop setup
+
+% The dry mix is the original input
+delay_dry_mix = 1 - delay_wet_mix;
+
+% How many wet delay samples we need to store: multiple of n
+delay_line_size = n * ceil(delay_time * Fs / n);
+
+% Initialize the wet delay line
+delay_line = zeros(1, delay_line_size);
+
+% Initialize the input buffer of size n
 in_buf = zeros(1, n);
 
-for num_buffer = 1:floor(614016 / 64) 
-    in_buf_start_index = pad_num + (num_buffer-1)*n+1;
+% The index we start writing to in the wet delay line
+initial_offset = delay_line_size - n;
+
+% Processing loop
+for num_buffer = 1:floor(audio_size / n) 
+    
+    % Set input buffer from input
+    in_buf_start_index = (num_buffer - 1) * n + 1;
     in_buf_end_index = in_buf_start_index + n - 1;
     in_buf = input(in_buf_start_index:in_buf_end_index);
     
-    num_delays1 = lfo1(num_buffer);
-    num_delays2 = lfo2(num_buffer);
-    num_delays3 = lfo3(num_buffer);
-    num_delays4 = lfo4(num_buffer);
+    % Get relevant wet delay line samples
+    wet_start_index = mod((initial_offset + (num_buffer - 1) * n + 1), delay_line_size);
+    wet_end_index = wet_start_index + n - 1;
+    wet = delay_line(wet_start_index:wet_end_index);
     
-    start_index1 = pad_num + (n*(num_buffer-1)) - num_delays1 + 1;
-    end_index1 = start_index1 + n - 1;
-    start_index2 = pad_num + (n*(num_buffer-1)) - num_delays2 + 1;
-    end_index2 = start_index2 + n - 1;
-    start_index3 = pad_num + (n*(num_buffer-1)) - num_delays3 + 1;
-    end_index3 = start_index3 + n - 1;
-    start_index4 = pad_num + (n*(num_buffer-1)) - num_delays4 + 1;
-    end_index4 = start_index4 + n - 1;
-    wet = (input(start_index1:end_index1) / 4) + (input(start_index2:end_index2) / 4) + (input(start_index3:end_index3) / 4) + (input(start_index4:end_index4) / 4);
-    out_buf = (in_buf / 2) +  (wet / 2);
-    %out_buf = wet;
+    % Output is a linear comb. of the input and wet delay line based on
+    % user-chosen rates
+    out_buf = (delay_dry_mix * in_buf) +  (delay_wet_mix * wet);
     
-    out_buf_start_index = n*(num_buffer-1)+1;
+    % Write output buffer to output
+    out_buf_start_index = n * (num_buffer - 1) + 1;
     out_buf_end_index = out_buf_start_index + n - 1;
     output(out_buf_start_index:out_buf_end_index) = out_buf;
+    
+    % Update delay lines
+    delay_line(wet_start_index:wet_end_index) = delay_feedback_gain * (wet + in_buf);
 end
 
-% for delayed_copy_num = 1:total_copies
-%     start_index = pad_num + (n*(i-1)) - copy_delays(delayed_copy_num) + 1;
-%     end_index = start_index + n - 1;
-%     output = output + (input(start_index:end_index) / total_copies); 
-% end
-
-audiowrite('Guitar Chorus.wav', output, Fs);
+%% Output file writing
+audiowrite('Guitar Delay.wav', output, Fs);
